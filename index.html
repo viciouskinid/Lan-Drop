@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LAN Drop</title>
+<style>
+:root{--bg:#0f1115;--p1:#171a20;--p2:#1c2029;--p3:#252a34;--bd:#2a2f3a;--bd2:#343a47;--tx:#e7eaf0;--tx2:#c3cad8;--mut:#8a93a6;--acc:#5b8cff;--err:#ef4444;--rail-w:62px;--panel-w:270px;--top:48px;--stat:34px;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.45 "Segoe UI",system-ui,sans-serif}
+button,input{font:inherit}
+button{background:var(--p3);color:var(--tx);border:1px solid var(--bd2);border-radius:6px;padding:.4rem .8rem;cursor:pointer}
+button:hover:not(:disabled){border-color:var(--acc)}
+button.p{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+button:disabled{opacity:.45;cursor:not-allowed}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+input[type=password],input[type=text]{display:block;width:100%;margin-top:.25rem;padding:.45rem .6rem;background:var(--bg);color:var(--tx);border:1px solid var(--bd2);border-radius:6px}
+input[type=file]{width:100%;color:var(--tx2)}
+label{display:block;margin:.7rem 0;color:var(--tx2)}
+a{color:var(--acc)}
+.mut,small,.status-build{color:var(--mut)}
+.row{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
+h1,h2{margin:0 0 .4rem}h2{font-size:1.05rem}
+h3{font-size:.85rem;color:var(--mut);margin:1.1rem 0 .4rem;font-weight:600}
+ul{list-style:none;margin:0;padding:0}
+li{display:flex;justify-content:space-between;gap:.8rem;align-items:center;padding:.55rem .2rem;border-top:1px solid var(--bd)}
+li:first-child{border-top:0}
+.n{overflow-wrap:anywhere}.x{flex:1;min-width:0}
+progress{width:100%;height:6px;accent-color:var(--acc)}
+[hidden]{display:none!important}
+#auth{max-width:520px;margin:6vh auto;padding:1.4rem;background:var(--p1);border:1px solid var(--bd);border-radius:10px}
+#shell{height:100vh;display:grid;grid-template-rows:var(--top) minmax(0,1fr) var(--stat);grid-template-columns:var(--rail-w) var(--panel-w) minmax(0,1fr);grid-template-areas:"top top top" "rail panel work" "stat stat stat";transition:grid-template-columns .18s}
+#shell:has(.rail:hover,.rail:focus-within),#shell.pin{--rail-w:180px}
+#shell.nopanel{--panel-w:0px}
+.top{grid-area:top;display:flex;align-items:center;gap:.8rem;padding:0 1rem;background:var(--p1);border-bottom:1px solid var(--bd)}
+.brand{font-weight:700}
+.pill{padding:.1rem .7rem;border:1px solid var(--bd2);border-radius:99px;color:var(--tx2);font-size:.85rem}
+.rail{grid-area:rail;display:flex;flex-direction:column;gap:.2rem;padding:.5rem;background:var(--p1);border-right:1px solid var(--bd);overflow:hidden}
+.rail button{display:flex;align-items:center;gap:.7rem;width:100%;white-space:nowrap;background:transparent;border:1px solid transparent;padding:.55rem .6rem;text-align:left}
+.rail button i{font-style:normal;width:1.4rem;text-align:center;flex:none}
+.rail button span{opacity:0;transition:opacity .15s}
+#shell:has(.rail:hover,.rail:focus-within) .rail span,#shell.pin .rail span{opacity:1}
+.rail button[aria-current=true]{background:var(--p3);border-color:var(--bd2);box-shadow:inset 3px 0 var(--acc)}
+.panel{grid-area:panel;overflow:auto;min-width:0;padding:1rem;background:var(--p2);border-right:1px solid var(--bd)}
+#shell.nopanel .panel{padding:0;border:0;overflow:hidden}
+.work{grid-area:work;overflow:auto;min-width:0;min-height:0;padding:1.2rem}
+.status{grid-area:stat;display:flex;gap:1.2rem;align-items:center;padding:0 1rem;background:var(--p1);border-top:1px solid var(--bd);font-size:.85rem;color:var(--mut)}
+.status .sp{flex:1}
+#msg{position:fixed;right:1rem;bottom:calc(var(--stat) + .8rem);max-width:min(420px,90vw);z-index:9;padding:.6rem .9rem;border-radius:8px;background:var(--p3);border:1px solid var(--acc);box-shadow:0 8px 24px #0009}
+#msg.e{border-color:var(--err);color:#ffb4ae}
+#xf:empty::before{content:'No transfers yet.';color:var(--mut)}
+#diag{width:100%;margin-top:.6rem;font:12px monospace;background:var(--bg);color:var(--tx);border:1px solid var(--bd2);border-radius:6px}
+@media (max-width:760px){
+ #shell{grid-template-columns:var(--rail-w) minmax(0,1fr);grid-template-rows:var(--top) auto minmax(0,1fr) var(--stat);grid-template-areas:"top top" "rail panel" "rail work" "stat stat"}
+ #shell.nopanel .panel{display:none}.panel{max-height:42vh;border-right:0;border-bottom:1px solid var(--bd)}
+}
+@media (prefers-reduced-motion:reduce){#shell{transition:none}}
+</style>
+</head>
+<body>
+<div id="msg" hidden role="status"></div>
+
+<section id="auth">
+  <h1>LAN Drop</h1>
+  <h2>Connect your GitHub account</h2>
+  <p class="mut">GitHub Gists carry the encrypted connection details only. Use the same account on both computers. GitHub’s sign-in flows can’t run from a static page without a secret, so this app uses a token you create yourself, with only the <b>gist</b> permission.</p>
+  <p><a href="https://github.com/settings/tokens/new?scopes=gist&description=LAN%20Drop" target="_blank" rel="noopener">Create a token</a> · <a href="https://github.com/settings/tokens" target="_blank" rel="noopener">Revoke tokens</a></p>
+  <div class="row"><input id="tok" type="password" placeholder="ghp_… or github_pat_…" autocomplete="off" aria-label="GitHub token" style="flex:1;min-width:12rem"><button class="p" id="save">Save token</button></div>
+  <label><input type="checkbox" id="rem"> Keep it for this tab session (otherwise it lives in memory only)</label>
+</section>
+
+<div id="shell" hidden>
+<header class="top"><b class="brand">LAN Drop</b><span class="pill" id="pill">Starting…</span></header>
+
+<nav class="rail" aria-label="Workspaces">
+  <button data-mode="computers" title="Computers"><i>🖥️</i><span>Computers</span></button>
+  <button data-mode="files" title="Files"><i>📁</i><span>Files</span></button>
+  <button data-mode="transfers" title="Transfers"><i>⇅</i><span>Transfers</span></button>
+  <button data-mode="settings" title="Settings"><i>⚙️</i><span>Settings</span></button>
+  <button id="pin" title="Keep this menu expanded" aria-pressed="false" style="margin-top:auto"><i>📌</i><span>Pin menu</span></button>
+</nav>
+
+<aside class="panel" aria-label="Tools">
+  <div data-for="computers"><h2>This computer</h2>
+    <p class="mut">Other computers on your network can see and connect to this one while it is visible.</p>
+    <p id="wait" hidden>Visible as <b id="asname"></b></p>
+    <button id="vis">Hide this computer</button>
+    <h3>How it works</h3>
+    <p class="mut">Click Connect on a computer in the list. Files then go directly between the two browsers.</p></div>
+  <div data-for="files" hidden><h2>Files</h2>
+    <p class="mut">Add files for the other computer to download.</p>
+    <input type="file" id="pick" multiple aria-label="Add files">
+    <p><button id="clearFiles">Remove all my files</button></p>
+    <h3>Connection</h3><p><b id="peer">Not connected</b></p><p class="mut" id="peerinfo"></p>
+    <button id="end" disabled>End session</button></div>
+  <div data-for="transfers" hidden><h2>Transfers</h2>
+    <p class="mut">Progress and speed of files being sent or received.</p>
+    <button id="clearXf">Clear finished</button></div>
+  <div data-for="settings" hidden><h2>Help</h2>
+    <button id="dg">Copy diagnostics</button>
+    <p class="mut">Includes your GitHub username, but no token, file names or IP address.</p>
+    <textarea id="diag" hidden readonly rows="8" aria-label="Diagnostics"></textarea>
+    <h3>GitHub token</h3>
+    <p><a href="https://github.com/settings/tokens" target="_blank" rel="noopener">Revoke tokens on GitHub</a></p>
+    <button id="signout">Remove token from this browser</button></div>
+</aside>
+
+<main class="work">
+  <section data-for="computers"><h2>Computers on your network</h2>
+    <p class="mut" id="scan">Looking for computers…</p><ul id="sess"></ul>
+    <p><small>Your public IP address is looked up through api.ipify.org and used to derive the encryption key for the connection details. That is obfuscation, not strong security. Your token never leaves your browser except in requests to api.github.com.</small></p></section>
+  <section data-for="files" hidden><h2>Files by computer</h2><div id="files"></div></section>
+  <section data-for="transfers" hidden><h2>Transfers</h2><ul id="xf"></ul></section>
+  <section data-for="settings" hidden><h2>This computer</h2>
+    <label>Name shown to other computers<input id="name" type="text" maxlength="40"></label>
+    <label>Make and model (optional)<input id="model" type="text" maxlength="60" placeholder="e.g. Dell XPS 15 9520"></label>
+    <p><small>Browsers can’t read your PC’s Windows name, user name, manufacturer or model, so type them here if you want them shown. They’re remembered on this computer.</small></p>
+    <label><input type="checkbox" id="sysinfo" checked> Share system details (OS, browser, CPU threads, memory, screen size, timezone)</label></section>
+</main>
+
+<footer class="status"><span id="st-mode"></span><span id="st-files"></span><span id="st-xf"></span><span class="sp"></span><span id="build" class="status-build" title="Build date and time (local)"></span></footer>
+</div>
+
+<script>
+/* BUILD STAMP: on EVERY code change set BUILD_STAMP to the current local time (YYYY-MM-DD HH:MM:SS).
+   If no clock is available set BUILD_STAMP = 'unknown' and increment BUILD_VERSION; with a clock set BUILD_VERSION = null. */
+const BUILD_STAMP   = '2026-11-19 12:45:33'; // BUILD_STAMP
+const BUILD_VERSION = null;                  // BUILD_VERSION
+const BUILD_NOTE    = 'AI had no clock access — version bumped.';
+</script>
+<script>
+document.getElementById('build').textContent = BUILD_STAMP !== 'unknown'
+  ? 'Build ' + BUILD_STAMP
+  : 'Build unknown · v' + BUILD_VERSION + ' (' + BUILD_NOTE + ')';
+</script>
+<script>
+'use strict';
+const $=s=>document.querySelector(s), CH=64*1024, TTL=30*60e3, LIVE=180e3, BEAT='landrop-beat.json', MARK='LAN Drop session';
+const OFFER='landrop-offer.json', ANSWER='landrop-answer.json';
+const enc=new TextEncoder(), dec=new TextDecoder();
+let token=sessionStorage.getItem('ld_tok')||'', ip='', gistId=null, pc=null, dc=null, poll=null, rx=Promise.resolve(), outQ=Promise.resolve();
+const defName=(navigator.userAgentData?.platform||'Computer')+' ('+['Amber','Cobalt','Jade','Coral','Slate','Ivory'][Math.random()*6|0]+' '+['Falcon','Otter','Lynx','Heron','Panda','Fox'][Math.random()*6|0]+')';
+let myName=defName;try{myName=localStorage.getItem('ld_name')||defName}catch{}
+const mine=new Map(), inc=new Map(), outg=new Map(); let fid=0, rid=0;
+
+const LOG=[];const log=(...a)=>{LOG.push(new Date().toISOString().slice(11,23)+' '+a.join(' '));if(LOG.length>60)LOG.shift()};
+function say(t,err){if(t)log(err?'ERR':'MSG',t);const m=$('#msg');m.textContent=t;m.className=err?'e':'';m.hidden=!t}
+const fmt=n=>n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':n<1073741824?(n/1048576).toFixed(1)+' MB':(n/1073741824).toFixed(2)+' GB';
+const el=(tag,props={},...kids)=>{const e=Object.assign(document.createElement(tag),props);e.append(...kids);return e};
+let view='auth',mode='computers',panelOpen=true,visible=true;
+function setMode(m,open){
+  if(m===mode&&!open)panelOpen=!panelOpen;else{mode=m;panelOpen=true}
+  $('#shell').classList.toggle('nopanel',!panelOpen);
+  for(const b of document.querySelectorAll('.rail [data-mode]'))b.setAttribute('aria-current',b.dataset.mode===mode);
+  for(const e of document.querySelectorAll('[data-for]'))e.hidden=e.dataset.for!==mode;
+  $('#st-mode').textContent={computers:'Computers',files:'Files',transfers:'Transfers',settings:'Settings'}[mode];
+}
+const show=v=>{view=v;$('#auth').hidden=v!=='auth';$('#shell').hidden=v==='auth';if(v==='conn')setMode('files',1);else if(v==='home')setMode('computers',1)};
+
+/* ---------- GitHub ---------- */
+const ET={};
+async function gh(path,opt={},tries=0){
+  const get=!opt.method,h={Accept:'application/vnd.github+json','Authorization':'Bearer '+token,'X-GitHub-Api-Version':'2022-11-28',...(opt.body?{'Content-Type':'application/json'}:{})};
+  if(get&&ET[path])h['If-None-Match']=ET[path].tag;
+  const r=await fetch('https://api.github.com'+path,{...opt,cache:'no-store',headers:h});
+  if(r.status===304&&ET[path])return ET[path].body;
+  if(r.status>=500&&tries<2){await new Promise(z=>setTimeout(z,900*(tries+1)));return gh(path,opt,tries+1)}
+  if(r.status===401)throw new Error('GitHub rejected the token. Create a new one with the gist permission.');
+  if(r.status===403||r.status===429)throw new Error('GitHub refused the request (rate limit or missing gist permission). Wait a minute and retry.');
+  if(r.status===404)return null;
+  if(!r.ok)throw new Error(r.status>=500?'GitHub had a temporary problem (error '+r.status+'). Choose the files again in a moment.':'GitHub error '+r.status);
+  const j=r.status===204?{}:await r.json(),tg=r.headers.get('etag');if(get&&tg)ET[path]={tag:tg,body:j};return j;
+}
+async function sweep(){ // delete only expired LAN Drop gists
+  const l=await gh('/gists?per_page=50')||[];
+  await Promise.all(l.filter(g=>g.description===MARK&&g.files[OFFER]&&Date.now()-Date.parse(g.updated_at)>TTL).map(g=>gh('/gists/'+g.id,{method:'DELETE'}).catch(()=>{})));
+}
+async function clearLeftover(){let id;try{id=localStorage.getItem('ld_gist');localStorage.removeItem('ld_gist')}catch{}
+  if(!id)return;try{const g=await gh('/gists/'+id);if(g&&g.description===MARK)await gh('/gists/'+id,{method:'DELETE'})}catch{}}
+let beatN=0;
+async function beat(){ if(!gistId)return; try{await gh('/gists/'+gistId,{method:'PATCH',body:JSON.stringify({files:{[BEAT]:{content:JSON.stringify({n:++beatN,t:Date.now()})}}})})}catch(e){log('heartbeat failed',e.message)} }
+function dropGist(keep){ clearInterval(window._beat); if(!gistId)return; const id=gistId; gistId=null;try{localStorage.removeItem('ld_gist')}catch{}
+  fetch('https://api.github.com/gists/'+id,{method:'DELETE',keepalive:!!keep,headers:{'Authorization':'Bearer '+token,'X-GitHub-Api-Version':'2022-11-28'}}).catch(()=>{}) }
+
+/* ---------- Encryption (PBKDF2 > AES-256-GCM, key derived from public IP) ---------- */
+const b64=u=>btoa(String.fromCharCode(...u)), unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0)), keys={};
+async function key(salt){const k=b64(salt)+ip;return keys[k]??=await crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:100000,hash:'SHA-256'},
+  await crypto.subtle.importKey('raw',enc.encode('landrop|'+ip),'PBKDF2',false,['deriveKey']),{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
+async function seal(o){const s=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));
+  const d=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},await key(s),enc.encode(JSON.stringify(o))));
+  return JSON.stringify({v:1,s:b64(s),i:b64(iv),d:b64(d)})}
+async function unseal(t){const o=JSON.parse(t);return JSON.parse(dec.decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(o.i)},await key(unb64(o.s)),unb64(o.d))))}
+const fp=async s=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',enc.encode('landrop-ip|'+s)))].slice(0,4).map(b=>b.toString(16).padStart(2,'0')).join('');
+let ipAt=0;const ensureIP=async()=>{if(!ip||Date.now()-ipAt>30e3)await getIP()};
+async function getIP(){ const old=ip; try{ip=(await(await fetch('https://api.ipify.org?format=json',{cache:'no-store'})).json()).ip;ipAt=Date.now();if(ip!==old)log('ip fingerprint',await fp(ip))}catch{throw new Error('Could not look up your public IP address. Check your internet connection.')} }
+
+/* ---------- WebRTC (host candidates only, no STUN/TURN) ---------- */
+function newPC(){
+  pc=new RTCPeerConnection({iceServers:[]});
+  pc.addEventListener('iceconnectionstatechange',()=>log('ice',pc?.iceConnectionState));
+  pc.addEventListener('connectionstatechange',()=>log('conn',pc?.connectionState));
+  pc.addEventListener('icegatheringstatechange',()=>log('gather',pc?.iceGatheringState));
+  pc.addEventListener('icecandidate',e=>e.candidate&&log('cand',e.candidate.type,e.candidate.address?.endsWith('.local')?'mdns':'ip',e.candidate.protocol));
+  pc.onconnectionstatechange=()=>{ if(pc?.connectionState==='failed')fail('Direct connection failed. Both computers must be on the same network, and Wi‑Fi “client isolation” or a VPN can block it. No relay is used.') };
+  return pc;
+}
+const gathered=p=>new Promise(r=>{if(p.iceGatheringState==='complete')return r();p.onicegatheringstatechange=()=>p.iceGatheringState==='complete'&&r();setTimeout(r,4000)});
+const needCand=sdp=>{if(!/a=candidate/.test(sdp))throw new Error('No local network candidates were found. Check that your browser allows WebRTC.')};
+function fail(t){say(t,true);teardown(true)}
+function teardown(toHome){joining=false;mine.clear();$('#pick').value='';lastKey='';theirs=[];theirName='Other computer';$('#peer').textContent='Not connected';$('#peerinfo').textContent='';
+  clearInterval(poll);poll=null;clearTimeout(window._exp);dropGist();
+  try{dc?.close()}catch{} try{pc?.close()}catch{} dc=pc=null;
+  for(const t of [...inc.values(),...outg.values()])if(!t.done)finish(t,'Interrupted');
+  $('#wait').hidden=true;
+  if(toHome){show(token?'home':'auth');if(token)setTimeout(()=>{if(visible&&!pc&&!sharing&&view==='home')share()},10e3)}
+}
+
+/* ---------- Host ---------- */
+async function share(){
+  try{
+    log('announcing');sharing=true;
+    await getIP();await sweep();
+    newPC();wire(pc.createDataChannel('landrop',{ordered:true}));
+    await pc.setLocalDescription(await pc.createOffer());await gathered(pc);
+    const sdp=pc.localDescription.sdp;needCand(sdp);
+    const g=await gh('/gists',{method:'POST',body:JSON.stringify({description:MARK,public:false,files:{[OFFER]:{content:await seal({name:myName,info:infoStr(),t:Date.now(),sdp})}}})});
+    gistId=g.id;try{localStorage.setItem('ld_gist',g.id)}catch{}beat();window._beat=setInterval(beat,45e3);$('#wait').hidden=false;$('#asname').textContent=myName;say('');
+    window._exp=setTimeout(()=>{if(view==='home'){stopHosting();share()}},20*60e3);
+    let busy=false;
+    poll=setInterval(async()=>{ if(busy||!gistId)return;busy=true;
+      try{const x=await gh('/gists/'+gistId);const a=x?.files?.[ANSWER];
+        if(a){clearInterval(poll);const ans=await unseal(a.content);await pc.setRemoteDescription({type:'answer',sdp:ans.sdp});say('Connecting…');armTimeout()}
+      }catch(e){fail(e.message)}busy=false},2500);
+  }catch(e){fail(e.message)}finally{sharing=false}
+}
+const armTimeout=()=>setTimeout(()=>{if(pc&&pc.connectionState!=='connected')fail('Could not connect directly within 25 seconds. Check that both computers are on the same network without client isolation or a VPN.')},25000);
+
+/* ---------- Guest ---------- */
+let joining=false,sharing=false,scanning=false,pauseUntil=0,scanTimer=null,lastKey='';const known=new Map();
+function stopHosting(){ if(!pc)return;clearInterval(poll);poll=null;clearTimeout(window._exp);dropGist();
+  if(dc){dc.onclose=null;try{dc.close()}catch{}}try{pc.close()}catch{}pc=dc=null;$('#wait').hidden=true }
+function startScan(){clearInterval(scanTimer);scan();scanTimer=setInterval(scan,3000)}
+async function scan(){
+  if(scanning||joining||document.hidden||view!=='home'||Date.now()<pauseUntil)return;
+  scanning=true;
+  try{
+    await ensureIP();
+    const l=(await gh('/gists?per_page=30'))||[],now=Date.now();
+    const c=l.filter(g=>g.description===MARK&&g.files[OFFER]&&g.files[BEAT]&&!g.files[ANSWER]&&now-Date.parse(g.updated_at)<LIVE&&g.id!==gistId);
+    const ok=[];
+    for(const g of c){
+      let k=known.get(g.id);
+      if(!k||k.ip!==ip){
+        try{k={u:g.updated_at,ip,o:await unseal((await gh('/gists/'+g.id)).files[OFFER].content)}}
+        catch{k={u:g.updated_at,ip,o:null};log('decrypt failed for gist',g.id.slice(0,6))}
+        known.set(g.id,k);
+      }
+      if(k.o)ok.push({id:g.id,o:k.o});
+    }
+    $('#scan').textContent=ok.length?'':c.length?'A session exists but can’t be read. The other computer is probably on a different public IP, or was opened before a network change. Reload it and choose files again.':'Looking for computers that are sharing files…';
+    const key=ok.map(x=>x.id).join();
+    if(key!==lastKey){lastKey=key;const ul=$('#sess');ul.replaceChildren();
+      for(const {id,o} of ok)ul.append(el('li',{},el('span',{className:'n'},o.name,el('br'),el('small',{},(o.info?o.info+'. ':'')+'Shared at '+new Date(o.t).toLocaleTimeString())),el('button',{className:'p',onclick:()=>join(id,o)},'Connect')))}
+  }catch(e){
+    if(/rejected the token/.test(e.message)){clearInterval(scanTimer);token='';sessionStorage.removeItem('ld_tok');show('auth');say(e.message,true)}
+    else{if(/refused/.test(e.message))pauseUntil=Date.now()+60e3;$('#scan').textContent=e.message}
+  }finally{scanning=false}
+}
+async function join(id,o){
+  try{
+    if(sharing)return say('Still getting ready to share. Try again in a few seconds.',true);joining=true;say('Connecting…');stopHosting();newPC();
+    pc.ondatachannel=e=>wire(e.channel);
+    await pc.setRemoteDescription({type:'offer',sdp:o.sdp});
+    await pc.setLocalDescription(await pc.createAnswer());await gathered(pc);
+    needCand(pc.localDescription.sdp);
+    await gh('/gists/'+id,{method:'PATCH',body:JSON.stringify({files:{[ANSWER]:{content:await seal({sdp:pc.localDescription.sdp})}}})});
+    armTimeout();
+  }catch(e){fail(e.message)}
+}
+
+/* ---------- Data channel protocol ---------- */
+const send=o=>dc?.readyState==='open'&&dc.send(JSON.stringify(o));
+function wire(ch){
+  dc=ch;ch.binaryType='arraybuffer';ch.bufferedAmountLowThreshold=1<<20;
+  ch.onopen=()=>{clearInterval(poll);dropGist();show('conn');say('');send({t:'hello',name:myName,info:infoStr()});sendList();renderMine()};
+  ch.onmessage=e=>{rx=rx.then(()=>onMsg(e.data)).catch(err=>say(err.message,true))};
+  ch.onclose=()=>{ if(pc){say('The other computer disconnected.',true);teardown(true)} };
+}
+const sendList=()=>send({t:'list',files:[...mine].map(([id,f])=>({id,name:f.name,size:f.size,type:f.type}))});
+async function onMsg(d){
+  if(typeof d!=='string'){
+    const id=new DataView(d).getUint32(0),t=inc.get(id);if(!t||t.dead)return;
+    const c=new Uint8Array(d,4);
+    if(t.w)await t.w.write(c);else t.chunks.push(c);
+    t.got+=c.byteLength;tick(t);return;
+  }
+  const m=JSON.parse(d);
+  if(m.t==='hello'){theirName=m.name;$('#peer').textContent='Connected to '+m.name;$('#peerinfo').textContent=m.info||'';renderFiles()}
+  else if(m.t==='list')renderTheirs(m.files);
+  else if(m.t==='get'){const f=mine.get(m.fid);if(!f)return send({t:'cancel',rid:m.rid,side:'tx'});
+    const t=track(m.rid,f,'out');outg.set(m.rid,t);outQ=outQ.then(()=>sendFile(t,f))}
+  else if(m.t==='end'){const t=inc.get(m.rid);if(!t||t.dead)return;
+    if(t.got!==t.size){finish(t,'Size mismatch, file incomplete');return}
+    if(t.w)await t.w.close();else{const a=el('a',{href:URL.createObjectURL(new Blob(t.chunks,{type:t.type})),download:t.name});a.click();setTimeout(()=>URL.revokeObjectURL(a.href),6e4)}
+    finish(t,'Complete')}
+  else if(m.t==='cancel'){const t=(m.side==='rx'?outg:inc).get(m.rid);if(t&&!t.done){t.dead=true;finish(t,'Cancelled by other computer');t.w?.abort?.().catch(()=>{})}}
+}
+async function sendFile(t,f){
+  for(let o=0;o<f.size&&!t.dead;o+=CH){
+    const b=await f.slice(o,o+CH).arrayBuffer();
+    if(dc.bufferedAmount>4<<20)await new Promise(r=>dc.addEventListener('bufferedamountlow',r,{once:true}));
+    if(t.dead||dc?.readyState!=='open')return;
+    const m=new Uint8Array(4+b.byteLength);new DataView(m.buffer).setUint32(0,t.rid);m.set(new Uint8Array(b),4);
+    dc.send(m);t.got+=b.byteLength;tick(t);
+  }
+  if(!t.dead){send({t:'end',rid:t.rid});finish(t,'Complete')}
+}
+
+/* ---------- Transfers UI ---------- */
+function track(r,f,dir){
+  const bar=el('progress',{max:100,value:0}),txt=el('small',{}),cancel=el('button',{onclick:()=>cancelX(t)},'Cancel');
+  const t={rid:r,name:f.name,size:f.size,type:f.type,dir,got:0,start:performance.now(),last:0,bar,txt,cancel,done:false,dead:false};
+  $('#xf').prepend(el('li',{},el('div',{className:'x'},el('span',{className:'n'},(dir==='in'?'↓ ':'↑ ')+f.name+' ('+fmt(f.size)+')'),bar,txt),cancel));
+  return t;
+}
+function tick(t,force){const n=performance.now();if(!force&&n-t.last<120)return;t.last=n;
+  const p=t.size?t.got/t.size*100:100;t.bar.value=p;t.txt.textContent=p.toFixed(0)+'% · '+fmt(t.got/((n-t.start)/1000||1))+'/s'}
+function finish(t,s){t.done=true;t.dead=t.dead||s!=='Complete';tick(t,true);if(s==='Complete')t.bar.value=100;t.txt.textContent=s+' · '+fmt(t.got/((performance.now()-t.start)/1000||1))+'/s';t.cancel.hidden=true}
+function cancelX(t){t.dead=true;send({t:'cancel',rid:t.rid,side:t.dir==='in'?'rx':'tx'});t.w?.abort?.().catch(()=>{});finish(t,'Cancelled')}
+async function download(f){
+  const t=track(++rid,f,'in');t.chunks=[];
+  if(window.showSaveFilePicker){ // stream straight to disk
+    try{t.w=await showSaveFilePicker({suggestedName:f.name});t.w=await t.w.createWritable();t.chunks=null}
+    catch(e){if(e.name==='AbortError'){t.dead=true;finish(t,'Cancelled');return}t.w=null}
+  }
+  inc.set(t.rid,t);send({t:'get',rid:t.rid,fid:f.id});
+}
+let theirs=[],theirName='Other computer';
+function renderTheirs(list){theirs=list;renderFiles()}
+function renderMine(){renderFiles()}
+function renderFiles(){
+  const box=$('#files');box.replaceChildren();
+  const grp=(title,list,empty,btn)=>{box.append(el('h3',{},title));const ul=el('ul');
+    if(!list.length)ul.append(el('li',{},el('span',{className:'mut'},empty)));
+    for(const f of list)ul.append(el('li',{},el('span',{className:'n'},f.name,el('br'),el('small',{},fmt(f.size))),btn(f)));box.append(ul)};
+  grp(myName+' (this computer)',[...mine].map(([id,f])=>({id,name:f.name,size:f.size,type:f.type})),'No files added. Use Add files in the panel.',f=>el('button',{onclick:()=>{mine.delete(f.id);sendList();renderFiles()}},'Remove'));
+  if(dc?.readyState==='open')grp(theirName,theirs,'No files shared yet.',f=>el('button',{className:'p',onclick:()=>download(f)},'Download'));
+  else box.append(el('p',{className:'mut'},'Connect to a computer to see its files here.'));
+}
+const addFiles=fs=>{for(const f of fs)mine.set(++fid,f)};
+
+/* ---------- Wiring ---------- */
+if(!(window.RTCPeerConnection&&crypto.subtle&&window.isSecureContext))say('This browser lacks WebRTC or Web Crypto, or the page is not served over HTTPS. Use desktop Chrome.',true);
+async function login(){
+  try{say('Checking token…');token=$('#tok').value.trim()||token;
+    if(!await gh('/gists?per_page=1'))throw new Error('Token check failed.');
+    if($('#rem').checked)sessionStorage.setItem('ld_tok',token);$('#tok').value='';say('');show('home');await clearLeftover();startScan();if(visible&&!pc&&!sharing)share()
+  }catch(e){token='';say(e.message,true)}
+}
+$('#save').onclick=login;
+$('#pick').onchange=e=>{addFiles(e.target.files);e.target.value='';sendList();renderFiles()};
+$('#vis').onclick=()=>{if(view!=='home')return;if(sharing)return say('Still getting ready. Try again in a few seconds.',true);
+  visible=!visible;if(visible)share();else stopHosting()};
+$('#clearFiles').onclick=()=>{mine.clear();sendList();renderFiles()};
+$('#clearXf').onclick=()=>{for(const li of [...$('#xf').children])if(li.querySelector('button')?.hidden)li.remove()};
+$('#signout').onclick=()=>{token='';sessionStorage.removeItem('ld_tok');clearInterval(scanTimer);teardown(false);show('auth');say('Token removed from this browser.')};
+for(const b of document.querySelectorAll('.rail [data-mode]'))b.onclick=()=>setMode(b.dataset.mode);
+$('#pin').onclick=()=>{const on=$('#shell').classList.toggle('pin');$('#pin').setAttribute('aria-pressed',on);try{localStorage.setItem('ld_pin',on?'1':'0')}catch{}};
+try{if(localStorage.getItem('ld_pin')==='1'){$('#shell').classList.add('pin');$('#pin').setAttribute('aria-pressed','true')}
+  $('#model').value=localStorage.getItem('ld_model')||''}catch{}
+$('#model').oninput=e=>{try{localStorage.setItem('ld_model',e.target.value.trim())}catch{}};
+const reannounce=()=>{if(view==='home'&&visible&&gistId&&!sharing){stopHosting();share()}};
+for(const id of ['#name','#model','#sysinfo'])$(id).addEventListener('change',reannounce);
+setMode('computers',1);
+setInterval(()=>{const up=dc?.readyState==='open';
+  $('#pill').textContent=up?'Connected to '+theirName:gistId?'Visible as '+myName:visible?'Getting ready…':'Hidden';
+  $('#wait').hidden=!gistId;$('#asname').textContent=myName;$('#vis').textContent=visible?'Hide this computer':'Show this computer';$('#vis').disabled=up;$('#end').disabled=!up;
+  $('#st-files').textContent=mine.size+' file'+(mine.size===1?'':'s')+' added';
+  const n=[...inc.values(),...outg.values()].filter(t=>!t.done).length;$('#st-xf').textContent=n?n+' transfer'+(n===1?'':'s')+' active':'No active transfers'},1000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){ipAt=0;scan()}});addEventListener('online',()=>{ipAt=0;scan()});
+$('#name').value=myName;$('#name').oninput=e=>{myName=e.target.value.trim()||defName;try{localStorage.setItem('ld_name',myName)}catch{}};
+let myInfo='';
+(async()=>{try{const u=navigator.userAgentData;let pl=u?.platform||'Computer';
+  try{const h=await u.getHighEntropyValues(['platformVersion','model']);if(pl==='Windows')pl=parseInt(h.platformVersion)>=13?'Windows 11':'Windows 10';if(h.model)pl+=' '+h.model}catch{}
+  const b=(u?.brands||[]).find(x=>/Chrome/.test(x.brand)&&!/Not|Chromium/.test(x.brand)),m=navigator.deviceMemory;
+  myInfo=[pl,b?b.brand+' '+b.version:'Chrome',navigator.hardwareConcurrency?navigator.hardwareConcurrency+' CPU threads':'',m?'RAM '+m+(m>=8?'+':'')+' GB':'',screen.width+'×'+screen.height,Intl.DateTimeFormat().resolvedOptions().timeZone].filter(Boolean).join(', ')}catch{}})();
+const infoStr=()=>[$('#model').value.trim(),$('#sysinfo').checked?myInfo:''].filter(Boolean).join(', ');
+try{$('#sysinfo').checked=localStorage.getItem('ld_info')!=='0'}catch{}
+$('#sysinfo').onchange=e=>{try{localStorage.setItem('ld_info',e.target.checked?'1':'0')}catch{}};
+
+$('#end').onclick=()=>{teardown(true);say('Session ended.')};
+addEventListener('beforeunload',()=>dropGist(true));
+async function diagnose(){
+  const o=[],h=async s=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',enc.encode(s)))].slice(0,4).map(b=>b.toString(16).padStart(2,'0')).join('');
+  o.push('LAN Drop diagnostics '+new Date().toISOString()+' build='+(BUILD_STAMP!=='unknown'?BUILD_STAMP:'unknown v'+BUILD_VERSION),navigator.userAgent,'secure='+isSecureContext+' rtc='+!!window.RTCPeerConnection+' fsapi='+!!window.showSaveFilePicker);
+  try{await getIP();o.push('ip-fingerprint='+await h('landrop-ip|'+ip)+' (equal on both computers if same public IP)')}catch(e){o.push('ip lookup failed: '+e.message)}
+  if(!token)o.push('no token entered');
+  else try{
+    const r=await fetch('https://api.github.com/user',{cache:'no-store',headers:{Authorization:'Bearer '+token}});
+    o.push('github /user status='+r.status+' scopes='+(r.headers.get('x-oauth-scopes')??'n/a')+' rate-remaining='+r.headers.get('x-ratelimit-remaining'));
+    if(r.ok)o.push('account='+(await r.json()).login);
+    const l=await gh('/gists?per_page=30')||[];o.push('gists listed='+l.length);
+    for(const g of l.filter(g=>g.description===MARK)){
+      let d='decrypts';try{await unseal((await gh('/gists/'+g.id)).files[OFFER].content)}catch{d='CANNOT decrypt'}
+      o.push(' session age='+Math.round((Date.now()-Date.parse(g.updated_at))/1e3)+'s files='+Object.keys(g.files).join(',')+' '+d);
+    }
+  }catch(e){o.push('github check failed: '+e.message)}
+  o.push('pc='+(pc?pc.connectionState+'/'+pc.iceConnectionState+'/'+pc.iceGatheringState:'none'),'dc='+(dc?.readyState??'none'),'--- log ---',...LOG);
+  const t=o.join('\n');$('#diag').value=t;
+  try{await navigator.clipboard.writeText(t);say('Diagnostics copied. Paste them into the chat.')}
+  catch{$('#diag').hidden=false;say('Copy the text below and paste it into the chat.')}
+}
+$('#dg').onclick=diagnose;
+if(token)login();
+</script>
+</body>
+</html>
